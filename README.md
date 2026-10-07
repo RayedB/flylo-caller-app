@@ -2,28 +2,37 @@
 
 Local Next.js demo: an iPhone on a desk. Tap **Call** to talk to FlyLo Guest Care over the [xAI Grok Speech-to-Speech API](https://docs.x.ai/developers/model-capabilities/audio/speech-to-speech). The agent looks up flights on the FlyLo booking API and opens Chatwoot tickets when it cannot resolve an issue.
 
-## Setup
+## Install
+
+**Requirements:** Node.js 20+ and npm.
 
 ```bash
-cp .env.example .env.local
-# fill in XAI_API_KEY and Chatwoot vars
+git clone https://github.com/RayedB/flylo-caller-app.git
+cd flylo-caller-app
 npm install
+cp .env.example .env.local
+```
+
+Edit `.env.local` and set at least `XAI_API_KEY` (from [console.x.ai](https://console.x.ai)). Add Chatwoot vars if you want live support tickets.
+
+```bash
 npm run dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000). Allow the microphone when prompted.
+Open [http://localhost:3000](http://localhost:3000) and allow the microphone when prompted.
 
 ### Environment
 
 | Variable | Purpose |
 | --- | --- |
 | `XAI_API_KEY` | Mint ephemeral realtime tokens (server-only) |
-| `FLYLO_API_BASE_URL` | Default `https://booking-api.flylo-air.com` |
+| `FLYLO_API_BASE_URL` | Booking API origin (default in `.env.example`: `http://localhost:8787`) |
 | `FLYLO_API_KEY` | Optional Bearer if your FlyLo deploy needs auth |
-| `CHATWOOT_BASE_URL` | Self-hosted Chatwoot origin |
+| `CHATWOOT_BASE_URL` | Chatwoot origin |
 | `CHATWOOT_ACCOUNT_ID` | Account id |
 | `CHATWOOT_INBOX_ID` | API inbox id |
 | `CHATWOOT_USER_ACCESS_TOKEN` | Profile → Access Token |
+| `TRIAGE_FALLBACK_URL` | Optional triage webhook if Chatwoot cannot reach the host |
 
 Without Chatwoot env vars, `create_support_ticket` returns a dry-run error the agent can explain; flight tools still work.
 
