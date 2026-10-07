@@ -34,6 +34,107 @@ body {
   mix-blend-mode: overlay;
 }
 
+/* ---------- iPhone hardware ---------- */
+
+.ios-type {
+  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "SF Pro Display",
+    "Helvetica Neue", system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  letter-spacing: -0.01em;
+}
+
+/* Fixed design size; IPhoneFrame zooms the whole device to fit the viewport. */
+.iphone-size {
+  width: 350px;
+}
+
+/* Desert Titanium band with brushed highlights. */
+.iphone-titanium {
+  background:
+    linear-gradient(90deg, rgba(255, 255, 255, 0.35) 0%, transparent 1.5%, transparent 98.5%, rgba(255, 255, 255, 0.3) 100%),
+    linear-gradient(160deg, #d9cfc1 0%, #a99d8c 22%, #e9e1d5 40%, #8f8473 63%, #c7bcac 82%, #7a705f 100%);
+  box-shadow:
+    0 50px 90px -25px rgba(0, 0, 0, 0.75),
+    0 25px 40px -20px rgba(0, 0, 0, 0.6),
+    inset 0 0 0 0.5px rgba(255, 255, 255, 0.55),
+    inset 0 1px 1px rgba(255, 255, 255, 0.6);
+}
+
+.iphone-btn {
+  position: absolute;
+  width: 3px;
+  border-radius: 2px;
+  background: linear-gradient(90deg, #7d7262, #d6ccbd 45%, #9a8f7e);
+  box-shadow: 0 0 1px rgba(0, 0, 0, 0.5);
+}
+
+/* Camera Control sits nearly flush with a sapphire face. */
+.iphone-camera-control {
+  width: 2px;
+  background: linear-gradient(90deg, #5f574b, #2a2722 50%, #5f574b);
+}
+
+.iphone-antenna {
+  position: absolute;
+  width: 3px;
+  height: 2px;
+  background: rgba(60, 52, 42, 0.55);
+}
+
+.iphone-glare {
+  background:
+    linear-gradient(118deg, rgba(255, 255, 255, 0.06) 0%, rgba(255, 255, 255, 0.02) 22%, transparent 40%),
+    radial-gradient(120% 60% at 100% 100%, rgba(255, 255, 255, 0.035), transparent 60%);
+  mix-blend-mode: screen;
+}
+
+/* ---------- iMessage bubbles (dark mode) ---------- */
+
+.imsg {
+  position: relative;
+}
+
+.imsg-tail-me::before,
+.imsg-tail-them::before {
+  content: "";
+  position: absolute;
+  bottom: 0;
+  height: 18px;
+  width: 20px;
+}
+
+.imsg-tail-me::after,
+.imsg-tail-them::after {
+  content: "";
+  position: absolute;
+  bottom: 0;
+  height: 18px;
+  width: 10px;
+  background: #000;
+}
+
+.imsg-tail-me::before {
+  right: -7px;
+  background: #0a84ff;
+  border-bottom-left-radius: 15px;
+}
+
+.imsg-tail-me::after {
+  right: -10px;
+  border-bottom-left-radius: 10px;
+}
+
+.imsg-tail-them::before {
+  left: -7px;
+  background: #262629;
+  border-bottom-right-radius: 15px;
+}
+
+.imsg-tail-them::after {
+  left: -10px;
+  border-bottom-right-radius: 10px;
+}
+
 .iphone-float {
   animation: phone-in 0.9s cubic-bezier(0.22, 1, 0.36, 1) both,
     phone-idle 5s ease-in-out 1s infinite;
@@ -91,10 +192,72 @@ body {
   }
 }
 
+.typing-dot {
+  animation: typing-bounce 1s ease-in-out infinite;
+}
+
+@keyframes typing-bounce {
+  0%,
+  60%,
+  100% {
+    transform: translateY(0);
+    opacity: 0.5;
+  }
+  30% {
+    transform: translateY(-3px);
+    opacity: 1;
+  }
+}
+
+/* Blinking caret on captions that are still streaming. */
+.caption-caret {
+  animation: caret-blink 1s steps(2, start) infinite;
+}
+
+@keyframes caret-blink {
+  to { visibility: hidden; }
+}
+
+/* ---------- Incoming callback ---------- */
+
+/* Phone buzzes on the desk while a callback rings. */
+.iphone-ring {
+  animation: phone-buzz 2.2s ease-in-out infinite;
+}
+
+@keyframes phone-buzz {
+  0%, 30%, 100% { translate: 0 0; rotate: 0deg; }
+  3%, 9%, 15%, 21% { translate: -2px 0; rotate: -0.6deg; }
+  6%, 12%, 18%, 24% { translate: 2px 0; rotate: 0.6deg; }
+}
+
+.incoming-halo {
+  animation: halo 2s ease-out infinite;
+}
+
+@keyframes halo {
+  0% { box-shadow: 0 0 0 0 rgba(94, 234, 212, 0.45); }
+  100% { box-shadow: 0 0 0 26px rgba(94, 234, 212, 0); }
+}
+
+.accept-pulse {
+  animation: accept-pulse 1.6s ease-in-out infinite;
+}
+
+@keyframes accept-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(48, 209, 88, 0.5); }
+  50% { box-shadow: 0 0 0 12px rgba(48, 209, 88, 0); }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .iphone-float,
   .call-pulse,
-  .avatar-speak {
+  .avatar-speak,
+  .typing-dot,
+  .iphone-ring,
+  .caption-caret,
+  .incoming-halo,
+  .accept-pulse {
     animation: none;
   }
 }
