@@ -1,10 +1,17 @@
 import { NextResponse } from "next/server";
+import { isAgentMode } from "@/lib/agent-session";
 import { executeTool } from "@/lib/tools";
 
 export const runtime = "nodejs";
 
 export async function POST(req: Request) {
-  let body: { name?: string; arguments?: unknown };
+  let body: {
+    name?: string;
+    arguments?: unknown;
+    channel?: unknown;
+    deviceId?: unknown;
+    callbackId?: unknown;
+  };
   try {
     body = await req.json();
   } catch {
@@ -29,7 +36,12 @@ export async function POST(req: Request) {
   }
 
   try {
-    const result = await executeTool(name, args ?? {});
+    const channel = isAgentMode(body.channel) ? body.channel : "voice";
+    const result = await executeTool(name, args ?? {}, {
+      channel,
+      deviceId: typeof body.deviceId === "string" ? body.deviceId.slice(0, 64) : undefined,
+      callbackId: typeof body.callbackId === "string" ? body.callbackId : undefined,
+    });
     return NextResponse.json({ name, result });
   } catch (e) {
     return NextResponse.json(

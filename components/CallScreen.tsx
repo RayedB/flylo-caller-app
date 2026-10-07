@@ -1,11 +1,26 @@
 "use client";
 
-import type { ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
+import {
+  CaptionsBubble,
+  CheckCircle,
+  EnvelopeFill,
+  MessageFill,
+  MicFill,
+  PhoneDown,
+  PhoneFill,
+  SpeakerWave,
+} from "@/components/icons";
+import type { MissedCall } from "@/lib/voice/useCallbackLine";
 import type {
+  ActiveCallback,
   CallStatus,
   TicketBanner,
   TranscriptLine,
 } from "@/lib/voice/useVoiceAgent";
+
+const GUEST_CARE_PHONE = "+1 (415) 580-0707";
+const GUEST_CARE_EMAIL = "contact@flylo-air.com";
 
 function formatTimer(sec: number) {
   const m = Math.floor(sec / 60);
@@ -13,20 +28,16 @@ function formatTimer(sec: number) {
   return `${m}:${s.toString().padStart(2, "0")}`;
 }
 
-function statusLabel(status: CallStatus) {
+function agentLabel(status: CallStatus) {
   switch (status) {
-    case "connecting":
-      return "Connecting…";
     case "listening":
       return "Listening";
     case "thinking":
       return "Looking that up…";
     case "speaking":
       return "Speaking";
-    case "error":
-      return "Call failed";
     default:
-      return "Guest Care";
+      return "";
   }
 }
 
@@ -35,232 +46,357 @@ type Props = {
   muted: boolean;
   error: string | null;
   transcript: TranscriptLine[];
+  /** Streaming text for the turn in progress. */
+  liveAssistant: string;
+  liveUser: string;
   ticket: TicketBanner | null;
   elapsedSec: number;
   onCall: () => void;
+  onChat: () => void;
   onHangUp: () => void;
   onToggleMute: () => void;
+  /** Set while this call is a Guest Care callback. */
+  callback: ActiveCallback | null;
+  missed: MissedCall[];
+  onReturnMissed: (call: MissedCall) => void;
 };
 
-export function CallScreen({
-  status,
-  muted,
-  error,
-  transcript,
-  ticket,
-  elapsedSec,
-  onCall,
-  onHangUp,
-  onToggleMute,
-}: Props) {
-  const inCall = status !== "idle" && status !== "error";
-  const speaking = status === "speaking";
+export function CallScreen(props: Props) {
+  const inCall = props.status !== "idle" && props.status !== "error";
+  return inCall ? <ActiveCall {...props} /> : <ContactCard {...props} />;
+}
 
-  if (!inCall) {
-    return (
-      <div className="relative flex h-full flex-col bg-[radial-gradient(ellipse_at_top,_#1a2f3a_0%,_#0b1216_55%,_#050708_100%)] px-6 pb-10 pt-14">
-        <div className="text-center text-[11px] tracking-[0.22em] text-white/45 uppercase">
-          FlyLo
-        </div>
-
-        <div className="mt-10 flex flex-1 flex-col items-center">
-          <div className="call-pulse flex h-28 w-28 items-center justify-center rounded-full bg-gradient-to-br from-teal-300/90 to-cyan-700 shadow-[0_0_40px_rgba(45,212,191,0.25)]">
-            <span className="font-[family-name:var(--font-display)] text-3xl tracking-tight text-[#062018]">
-              FL
-            </span>
-          </div>
-          <h1 className="mt-6 font-[family-name:var(--font-display)] text-[1.75rem] leading-tight tracking-tight">
-            Guest Care
-          </h1>
-          <p className="mt-2 text-center text-sm text-white/55">
-            Daily 06:00–22:00 PT
-          </p>
-          <p className="mt-6 max-w-[220px] text-center text-xs leading-relaxed text-white/40">
-            Tap Call to speak with FlyLo. Mic access is required for the demo.
-          </p>
-
-          {error ? (
-            <p className="mt-4 max-w-[240px] text-center text-xs text-rose-300">
-              {error}
-            </p>
-          ) : null}
-        </div>
-
-        <div className="flex flex-col items-center gap-3 pb-4">
-          <button
-            type="button"
-            onClick={onCall}
-            className="call-pulse flex h-16 w-16 items-center justify-center rounded-full bg-[#34c759] text-white shadow-[0_10px_30px_rgba(52,199,89,0.45)] transition active:scale-95"
-            aria-label="Call Guest Care"
-          >
-            <PhoneIcon />
-          </button>
-          <span className="text-xs tracking-wide text-white/50">Call</span>
-        </div>
-      </div>
-    );
-  }
-
+function Monogram({ size, speaking }: { size: number; speaking?: boolean }) {
   return (
-    <div className="relative flex h-full flex-col bg-[radial-gradient(ellipse_at_top,_#243447_0%,_#0d141c_50%,_#05070a_100%)] px-5 pb-9 pt-14">
-      <div className="text-center">
-        <p className="text-[11px] tracking-[0.2em] text-white/40 uppercase">
-          FlyLo Airlines
+    <div
+      className={`flex shrink-0 items-center justify-center rounded-full bg-[linear-gradient(160deg,#5eead4_0%,#14b8a6_45%,#0e5f63_100%)] shadow-[inset_0_-6px_14px_rgba(0,0,0,0.25)] ${
+        speaking ? "avatar-speak" : ""
+      }`}
+      style={{ width: size, height: size }}
+    >
+      <span
+        className="font-[family-name:var(--font-display)] tracking-tight text-[#05201c]"
+        style={{ fontSize: size * 0.38 }}
+      >
+        FL
+      </span>
+    </div>
+  );
+}
+
+/* ---------- Idle: iOS contact card ---------- */
+
+function ContactCard({ error, onCall, onChat, missed, onReturnMissed }: Props) {
+  return (
+    <div className="flex h-full flex-col overflow-y-auto bg-black pb-8">
+      <div className="bg-[radial-gradient(120%_85%_at_50%_0%,#134e4a_0%,#0b2a2a_45%,#000_100%)] px-4 pt-[64px] pb-5">
+        <div className="flex flex-col items-center">
+          <Monogram size={92} />
+          <h1 className="mt-3 text-[26px] leading-tight font-semibold tracking-[-0.02em]">
+            FlyLo Guest Care
+          </h1>
+          <p className="mt-0.5 text-[15px] text-white/55">FlyLo Airlines</p>
+        </div>
+
+        <div className="mt-5 grid grid-cols-3 gap-2">
+          <ActionTile label="message" ariaLabel="Chat with Guest Care" onClick={onChat}>
+            <MessageFill size={20} />
+          </ActionTile>
+          <ActionTile label="call" ariaLabel="Call Guest Care" onClick={onCall}>
+            <PhoneFill size={20} />
+          </ActionTile>
+          <ActionTile label="mail" ariaLabel="Email Guest Care" href={`mailto:${GUEST_CARE_EMAIL}`}>
+            <EnvelopeFill size={20} />
+          </ActionTile>
+        </div>
+
+        {error ? (
+          <p role="alert" className="mt-3 rounded-xl bg-[#ff453a]/15 px-3 py-2 text-center text-[13px] text-[#ff8a80]">
+            {error}
+          </p>
+        ) : null}
+      </div>
+
+      <div className="space-y-3 px-4 pt-1">
+        {missed.length ? (
+          <div>
+            <p className="mb-1 px-1 text-[12px] font-semibold text-white/50">Recents</p>
+            <InfoGroup>
+              {missed.map((call, i) => (
+                <MissedRow
+                  key={call.id}
+                  call={call}
+                  last={i === missed.length - 1}
+                  onReturn={() => onReturnMissed(call)}
+                />
+              ))}
+            </InfoGroup>
+          </div>
+        ) : null}
+
+        <InfoGroup>
+          <InfoRow label="guest care">
+            <button type="button" onClick={onCall} className="text-[#0a84ff]">
+              {GUEST_CARE_PHONE}
+            </button>
+          </InfoRow>
+          <InfoRow label="email" last>
+            <a href={`mailto:${GUEST_CARE_EMAIL}`} className="text-[#0a84ff]">
+              {GUEST_CARE_EMAIL}
+            </a>
+          </InfoRow>
+        </InfoGroup>
+
+        <InfoGroup>
+          <InfoRow label="hours" last>
+            <span>Daily 06:00–22:00 PT</span>
+          </InfoRow>
+        </InfoGroup>
+
+        <p className="px-1 text-[12px] leading-snug text-white/40">
+          Calls use your microphone. Messages work without one.
         </p>
-        <h1 className="mt-3 font-[family-name:var(--font-display)] text-[1.65rem] tracking-tight">
-          Guest Care
-        </h1>
-        <p className="mt-1 text-sm text-white/55">{formatTimer(elapsedSec)}</p>
-        <p className="mt-0.5 text-xs text-teal-200/80">{statusLabel(status)}</p>
-      </div>
-
-      <div className="mt-8 flex justify-center">
-        <div
-          className={`flex h-28 w-28 items-center justify-center rounded-full bg-gradient-to-br from-white/15 to-white/5 ring-1 ring-white/15 ${
-            speaking ? "avatar-speak" : ""
-          }`}
-        >
-          <span className="font-[family-name:var(--font-display)] text-3xl text-white/90">
-            FL
-          </span>
-        </div>
-      </div>
-
-      {ticket ? (
-        <div className="mt-4 rounded-xl bg-teal-400/15 px-3 py-2 text-center text-[11px] text-teal-100 ring-1 ring-teal-300/30">
-          Ticket opened
-          {ticket.displayId != null ? ` · #${ticket.displayId}` : ""}
-          {ticket.conversationId != null
-            ? ` (id ${ticket.conversationId})`
-            : ""}
-        </div>
-      ) : null}
-
-      <div className="mt-4 min-h-0 flex-1 overflow-hidden rounded-2xl bg-black/35 ring-1 ring-white/10">
-        <div className="border-b border-white/10 px-3 py-1.5 text-[10px] tracking-wider text-white/35 uppercase">
-          Live transcript
-        </div>
-        <div className="h-[140px] space-y-2 overflow-y-auto px-3 py-2 text-[11px] leading-snug">
-          {transcript.length === 0 ? (
-            <p className="text-white/30">Waiting for the first turn…</p>
-          ) : (
-            transcript.map((line) => (
-              <p key={line.id}>
-                <span
-                  className={
-                    line.role === "user"
-                      ? "text-sky-200/90"
-                      : line.role === "assistant"
-                        ? "text-teal-100/90"
-                        : "text-white/40"
-                  }
-                >
-                  {line.role === "user"
-                    ? "You"
-                    : line.role === "assistant"
-                      ? "Guest Care"
-                      : "System"}
-                  :{" "}
-                </span>
-                <span className="text-white/75">{line.text}</span>
-              </p>
-            ))
-          )}
-        </div>
-      </div>
-
-      <div className="mt-5 flex items-end justify-center gap-7 pb-2">
-        <ControlButton
-          label={muted ? "Unmute" : "Mute"}
-          active={muted}
-          onClick={onToggleMute}
-        >
-          <MicIcon muted={muted} />
-        </ControlButton>
-        <ControlButton label="Speaker" dim>
-          <SpeakerIcon />
-        </ControlButton>
-        <div className="flex flex-col items-center gap-2">
-          <button
-            type="button"
-            onClick={onHangUp}
-            className="flex h-14 w-14 items-center justify-center rounded-full bg-[#ff3b30] text-white shadow-[0_8px_24px_rgba(255,59,48,0.4)] transition active:scale-95"
-            aria-label="End call"
-          >
-            <EndIcon />
-          </button>
-          <span className="text-[10px] text-white/45">End</span>
-        </div>
       </div>
     </div>
   );
 }
 
-function ControlButton({
+function MissedRow({
+  call,
+  last,
+  onReturn,
+}: {
+  call: MissedCall;
+  last: boolean;
+  onReturn: () => void;
+}) {
+  const at = new Date(call.createdAt).toLocaleTimeString("en-US", {
+    hour: "numeric",
+    minute: "2-digit",
+  });
+  const label =
+    call.reason === "declined"
+      ? "Declined callback"
+      : call.reason === "dropped"
+        ? "Dropped callback"
+        : "Missed callback";
+  return (
+    <div className="ml-3.5 flex items-center gap-2 py-2 pr-2">
+      <div className="min-w-0 flex-1">
+        <p className="truncate text-[15px] leading-tight text-[#ff453a]">{label}</p>
+        <p className="mt-0.5 text-[12px] text-white/50">
+          Ticket #{call.displayId} · {at}
+        </p>
+        {last ? null : <div className="mt-2 -mb-2 h-px bg-white/[0.12]" />}
+      </div>
+      <button
+        type="button"
+        onClick={onReturn}
+        aria-label={`Return callback for ticket ${call.displayId}`}
+        className="flex h-8 items-center gap-1 rounded-full bg-[#30d158]/15 px-3 text-[13px] font-medium text-[#30d158] transition active:bg-[#30d158]/25 focus-visible:outline-2 focus-visible:outline-[#30d158]"
+      >
+        <PhoneFill size={13} />
+        call back
+      </button>
+    </div>
+  );
+}
+
+function ActionTile({
   children,
   label,
+  ariaLabel,
   onClick,
-  active,
-  dim,
+  href,
 }: {
   children: ReactNode;
   label: string;
+  ariaLabel: string;
   onClick?: () => void;
-  active?: boolean;
-  dim?: boolean;
+  href?: string;
 }) {
+  const cls =
+    "flex h-[58px] flex-col items-center justify-center gap-1 rounded-[12px] bg-white/[0.11] text-[#0a84ff] transition active:bg-white/20 hover:bg-white/[0.15] focus-visible:outline-2 focus-visible:outline-[#0a84ff]";
+  const inner = (
+    <>
+      {children}
+      <span className="text-[11px] leading-none font-medium">{label}</span>
+    </>
+  );
+  return href ? (
+    <a href={href} aria-label={ariaLabel} className={cls}>
+      {inner}
+    </a>
+  ) : (
+    <button type="button" onClick={onClick} aria-label={ariaLabel} className={cls}>
+      {inner}
+    </button>
+  );
+}
+
+function InfoGroup({ children }: { children: ReactNode }) {
+  return <div className="overflow-hidden rounded-[12px] bg-[#1c1c1e]">{children}</div>;
+}
+
+function InfoRow({ label, children, last }: { label: string; children: ReactNode; last?: boolean }) {
   return (
-    <div className="flex flex-col items-center gap-2">
-      <button
-        type="button"
-        onClick={onClick}
-        disabled={dim && !onClick}
-        className={`flex h-12 w-12 items-center justify-center rounded-full transition ${
-          active
-            ? "bg-white text-black"
-            : "bg-white/12 text-white ring-1 ring-white/10"
-        } ${dim ? "opacity-70" : "active:scale-95"}`}
-        aria-label={label}
-      >
-        {children}
-      </button>
-      <span className="text-[10px] text-white/45">{label}</span>
+    <div className="ml-3.5 py-2 pr-3.5">
+      <p className="text-[12px] leading-tight text-white/90">{label}</p>
+      <div className="mt-0.5 text-[15px] leading-snug">{children}</div>
+      {last ? null : <div className="mt-2 -mb-2 h-px bg-white/[0.12]" />}
     </div>
   );
 }
 
-function PhoneIcon() {
+/* ---------- In call: iOS call screen ---------- */
+
+function ActiveCall({
+  status,
+  muted,
+  transcript,
+  liveAssistant,
+  liveUser,
+  ticket,
+  elapsedSec,
+  onHangUp,
+  onToggleMute,
+  callback,
+}: Props) {
+  const [captions, setCaptions] = useState(true);
+  const captionsRef = useRef<HTMLDivElement>(null);
+  const connecting = status === "connecting";
+
+  useEffect(() => {
+    const el = captionsRef.current;
+    if (el) el.scrollTop = el.scrollHeight;
+  }, [transcript, liveAssistant, liveUser, captions]);
+
   return (
-    <svg width="28" height="28" viewBox="0 0 24 24" fill="currentColor">
-      <path d="M6.6 10.8a15.1 15.1 0 006.6 6.6l2.2-2.2a1.2 1.2 0 011.2-.3 13 13 0 004 .6 1.2 1.2 0 011.2 1.2V20a1.2 1.2 0 01-1.2 1.2A17.8 17.8 0 012.8 3.2 1.2 1.2 0 014 2h3.3a1.2 1.2 0 011.2 1.2 13 13 0 00.6 4 1.2 1.2 0 01-.3 1.2L6.6 10.8z" />
-    </svg>
+    <div className="relative flex h-full flex-col bg-[radial-gradient(130%_70%_at_50%_0%,#145552_0%,#0b2b2c_40%,#060b0c_75%,#000_100%)] px-6 pt-[72px] pb-10">
+      <div className="text-center">
+        <h1 className="text-[28px] leading-tight font-semibold tracking-[-0.02em]">
+          FlyLo Guest Care
+        </h1>
+        {callback ? (
+          <p className="mt-0.5 text-[13px] text-white/50">Callback · ticket #{callback.displayId}</p>
+        ) : null}
+        <p className="mt-1 text-[17px] text-white/65 tabular-nums" aria-live="polite">
+          {connecting ? (callback ? "connecting…" : "calling…") : formatTimer(elapsedSec)}
+        </p>
+      </div>
+
+      <div className="mt-6 flex flex-col items-center">
+        <Monogram size={104} speaking={status === "speaking"} />
+        <p className="mt-3 h-4 text-[12px] text-teal-200/80" aria-live="polite">
+          {agentLabel(status)}
+        </p>
+      </div>
+
+      {ticket ? (
+        <div className="mx-auto mt-3 flex items-center gap-1.5 rounded-full bg-white/15 px-3 py-1.5 text-[12px] text-white/90 backdrop-blur-xl">
+          <CheckCircle className="text-[#30d158]" />
+          Support ticket opened
+          {ticket.displayId != null ? ` · #${ticket.displayId}` : ""}
+        </div>
+      ) : null}
+
+      <div className="mt-4 min-h-0 flex-1">
+        {captions ? (
+          <div className="flex h-full max-h-[190px] flex-col overflow-hidden rounded-[18px] bg-white/[0.09] backdrop-blur-xl">
+            <p className="px-3.5 pt-2.5 text-[10px] font-semibold tracking-[0.06em] text-white/45 uppercase">
+              Live captions
+            </p>
+            <div ref={captionsRef} className="min-h-0 flex-1 space-y-1.5 overflow-y-auto px-3.5 pt-1 pb-3 text-[13px] leading-snug">
+              {transcript.length === 0 && !liveAssistant && !liveUser ? (
+                <p className="text-white/35">Captions appear when someone speaks.</p>
+              ) : (
+                transcript.map((line) => (
+                  <p key={line.id}>
+                    <span className={line.role === "user" ? "font-semibold text-white" : "font-semibold text-teal-200"}>
+                      {line.role === "user" ? "You" : line.role === "assistant" ? "Guest Care" : "System"}
+                    </span>
+                    <span className="text-white/80"> {line.text}</span>
+                  </p>
+                ))
+              )}
+              {liveAssistant ? <LiveCaption who="Guest Care" text={liveAssistant} /> : null}
+              {liveUser ? <LiveCaption who="You" text={liveUser} /> : null}
+            </div>
+          </div>
+        ) : null}
+      </div>
+
+      <div className="mt-6 grid grid-cols-3 gap-x-6 gap-y-5 px-1">
+        <CallControl label="speaker" ariaLabel="Speaker" disabled>
+          <SpeakerWave />
+        </CallControl>
+        <CallControl
+          label="captions"
+          ariaLabel={captions ? "Hide captions" : "Show captions"}
+          active={captions}
+          onClick={() => setCaptions((c) => !c)}
+        >
+          <CaptionsBubble />
+        </CallControl>
+        <CallControl label="mute" ariaLabel={muted ? "Unmute" : "Mute"} active={muted} onClick={onToggleMute}>
+          <MicFill slashed={muted} />
+        </CallControl>
+      </div>
+
+      <div className="mt-6 flex justify-center">
+        <button
+          type="button"
+          onClick={onHangUp}
+          className="flex h-[70px] w-[70px] items-center justify-center rounded-full bg-[#ff3b30] text-white transition active:brightness-90 focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-white"
+          aria-label="End call"
+        >
+          <PhoneDown />
+        </button>
+      </div>
+    </div>
   );
 }
 
-function MicIcon({ muted }: { muted: boolean }) {
+function LiveCaption({ who, text }: { who: "You" | "Guest Care"; text: string }) {
   return (
-    <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
-      {muted ? (
-        <path d="M19 11a1 1 0 00-2 0 5 5 0 01-.7 2.5l1.5 1.5A6.9 6.9 0 0019 11zm-7-8a3 3 0 00-3 3v.2l6 6V6a3 3 0 00-3-3zm7.7 14.3L4.7 2.3a1 1 0 10-1.4 1.4l4.2 4.2V11a5 5 0 006.1 4.9l1.7 1.7A6.9 6.9 0 015 11a1 1 0 10-2 0 8.9 8.9 0 007 8.7V22h4v-2.3a8.8 8.8 0 002.6-.9l2.7 2.7a1 1 0 001.4-1.4z" />
-      ) : (
-        <path d="M12 14a3 3 0 003-3V6a3 3 0 10-6 0v5a3 3 0 003 3zm5-3a1 1 0 112 0 7 7 0 01-6 6.9V22h-2v-4.1A7 7 0 015 11a1 1 0 112 0 5 5 0 0010 0z" />
-      )}
-    </svg>
+    <p aria-live="off">
+      <span className={who === "You" ? "font-semibold text-white" : "font-semibold text-teal-200"}>{who}</span>
+      <span className="text-white/60"> {text}</span>
+      <span className="caption-caret ml-0.5 inline-block h-[0.9em] w-[2px] translate-y-[2px] bg-white/50" />
+    </p>
   );
 }
 
-function SpeakerIcon() {
+function CallControl({
+  children,
+  label,
+  ariaLabel,
+  onClick,
+  active,
+  disabled,
+}: {
+  children: ReactNode;
+  label: string;
+  ariaLabel: string;
+  onClick?: () => void;
+  active?: boolean;
+  disabled?: boolean;
+}) {
   return (
-    <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
-      <path d="M3 9v6h4l5 4V5L7 9H3zm13.5 3a2.5 2.5 0 00-1.5-2.3v4.6a2.5 2.5 0 001.5-2.3zm0-6.9v2.1a5 5 0 010 9.6v2.1a7 7 0 000-13.8z" />
-    </svg>
-  );
-}
-
-function EndIcon() {
-  return (
-    <svg width="26" height="26" viewBox="0 0 24 24" fill="currentColor">
-      <path d="M21 15.5a1.5 1.5 0 01-1.5 1.5h-2.1a1.5 1.5 0 01-1.5-1.3 12.6 12.6 0 01-.4-2.7 1.5 1.5 0 01.4-1l1.1-1.1a14.7 14.7 0 00-9 0l1.1 1.1a1.5 1.5 0 01.4 1 12.6 12.6 0 01-.4 2.7A1.5 1.5 0 016.6 17H4.5A1.5 1.5 0 013 15.5c0-6.2 8-8.5 9-8.5s9 2.3 9 8.5z" />
-    </svg>
+    <div className="flex flex-col items-center gap-1.5">
+      <button
+        type="button"
+        onClick={onClick}
+        disabled={disabled}
+        aria-label={ariaLabel}
+        aria-pressed={disabled ? undefined : Boolean(active)}
+        className={`flex h-[66px] w-[66px] items-center justify-center rounded-full backdrop-blur-xl transition focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white ${
+          active ? "bg-white text-black" : "bg-white/[0.18] text-white active:bg-white/30"
+        } ${disabled ? "opacity-45" : ""}`}
+      >
+        {children}
+      </button>
+      <span className="text-[12px] text-white/85">{label}</span>
+    </div>
   );
 }

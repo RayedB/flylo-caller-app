@@ -1,4 +1,5 @@
-import { ALLOWED_TOOLS, type ToolName } from "@/lib/agent-session";
+import { ALLOWED_TOOLS, type AgentMode, type ToolName } from "@/lib/agent-session";
+import { getCallback, recordCallbackUpdate } from "@/lib/callbacks";
 import { createSupportTicket } from "@/lib/chatwoot";
 import * as flylo from "@/lib/flylo";
 
@@ -17,7 +18,20 @@ function num(v: unknown): number | undefined {
   return typeof v === "number" && Number.isFinite(v) ? v : undefined;
 }
 
-export async function executeTool(name: string, rawArgs: unknown) {
+export type ToolContext = {
+  channel: AgentMode;
+  /** Browser that is talking to the agent; stored on new tickets for callbacks. */
+  deviceId?: string;
+  /** Set during an outbound callback; the server resolves the ticket from it. */
+  callbackId?: string;
+};
+
+export async function executeTool(
+  name: string,
+  rawArgs: unknown,
+  ctx: ToolContext = { channel: "voice" },
+) {
+  const { channel, deviceId, callbackId } = ctx;
   if (!ALLOWED_TOOLS.has(name as ToolName)) {
     return { ok: false, error: `Tool not allowed: ${name}` };
   }
@@ -86,6 +100,9 @@ export async function executeTool(name: string, rawArgs: unknown) {
           pnr: str(args.pnr),
           summary,
           transcript: str(args.transcript),
+          channel,
+          deviceId,
+          callbackRequested: args.callback_requested === true,
         });
         return result;
       } catch (e) {
@@ -93,6 +110,22 @@ export async function executeTool(name: string, rawArgs: unknown) {
           ok: false,
           error: e instanceof Error ? e.message : "Chatwoot error",
         };
+      }
+    }
+    case "add_ticket_update": {
+      const cb = callbackId ? getCallback(callbackId) : undefined;
+      if (!cb || cb.state !== "answered") {
+        return { ok: false, error: "add_ticket_update is only available during a callback" };
+      }
+      const summary = str(args.summary);
+      if (!summary) return { ok: false, error: "summary is required" };
+      try {
+        return await recordCallbackUpdate(cb.id, {
+          summary,
+          callbackRequested: args.callback_requested === true,
+        });
+      } catch (e) {
+        return { ok: false, error: e instanceof Error ? e.message : "Chatwoot error" };
       }
     }
     default:
